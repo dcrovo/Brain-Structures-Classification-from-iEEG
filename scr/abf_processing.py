@@ -1,8 +1,8 @@
-from functions import procesar_archivos_abf
+from functions import process_abf_files
 
-# Definir las rutas de la carpeta fuente y la carpeta de destino
-carpeta_abf_source = './data/source'
-carpeta_segments_destino = './data/segments'
+# Define the source and destination folder paths
+source_folder_abf = './data/source'
+destination_folder_segments = './data/segments'
 
-# Llamar a la función para procesar los archivos .abf
-procesar_archivos_abf(carpeta_abf_source, carpeta_segments_destino)
+# Call the function to process the .abf files
+process_abf_files(source_folder_abf, destination_folder_segments)
