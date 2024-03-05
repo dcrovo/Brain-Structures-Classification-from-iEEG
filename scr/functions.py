@@ -7,6 +7,86 @@ import os
 import pandas as pd
 import json
 from IPython.display import display
+from scipy import signal
+
+def normalize_and_segment_channel(abf_file_name, channel_number, normalization_type='z_score', source_directory='data/segments', destination_directory='data/segments_normalized', segment_duration_ms=290, sampling_rate=1000):
+    """
+    Normalizes and segments data for a specific channel from .csv files based on an ABF file name, then saves the segments into a new directory.
+    
+    Parameters:
+    - abf_file_name: str, name of the original ABF file without the extension.
+    - channel_number: int, the specific channel to process.
+    - normalization_type: str, type of normalization ('z_score', 'min_max', or 'none').
+    - source_directory: str, path to the directory containing the original segments.
+    - destination_directory: str, path to the directory where normalized segments will be saved.
+    - segment_duration_ms: int, duration of each segment in milliseconds.
+    - sampling_rate: int, sampling rate of the data in Hz.
+    """
+    # Ensure the destination directory exists
+    destination_path = os.path.join(destination_directory, abf_file_name)
+    os.makedirs(destination_path, exist_ok=True)
+
+    pattern = f"segmento_*_canal_{channel_number}_"
+    print(f"Searching for files matching the pattern: {pattern} within {abf_file_name}")
+
+    files_to_process = []
+    # Now we adjust the source_path to include the channel directory
+    source_path = os.path.join(source_directory, abf_file_name, f"canal_{channel_number}")
+    print(f"Looking in: {source_path}")
+    
+    # The pattern adjusted to not specifically include 'canal_X' since we're already in the specific channel directory
+    pattern = "segmento_"
+    print(f"Searching for files matching the pattern: {pattern} within {abf_file_name}, channel {channel_number}")
+
+    files_to_process = []
+    for root, dirs, files in os.walk(source_path):
+        for file in files:
+            if pattern in file:
+                print("File to process:", os.path.join(root, file))
+                files_to_process.append(os.path.join(root, file))
+
+    print("____________________________________________________________________________")
+    # Sort files to process in ascending order based on segment number or time interval
+    files_to_process.sort(key=lambda x: int(x.split('_')[1]))
+
+    all_data = []
+    for file_path in files_to_process:
+        df = pd.read_csv(file_path)
+        all_data.append(df['Data'].values)
+    
+    # Concatenate all data segments
+    full_signal = np.concatenate(all_data)
+    
+    # Normalize the full signal
+    if normalization_type == 'z_score':
+        normalized_signal = (full_signal - np.mean(full_signal)) / np.std(full_signal)
+    elif normalization_type == 'min_max':
+        normalized_signal = (full_signal - np.min(full_signal)) / (np.max(full_signal) - np.min(full_signal))
+    elif normalization_type == 'none':
+        normalized_signal = full_signal
+    else:
+        raise ValueError("Invalid normalization type. Use 'z_score', 'min_max', or 'none'.")
+
+    # Segment the normalized signal
+    segment_length = int((segment_duration_ms / 1000) * sampling_rate)
+    num_segments = len(normalized_signal) // segment_length
+
+    for i in range(num_segments):
+        segment = normalized_signal[i*segment_length:(i+1)*segment_length]
+        segment_df = pd.DataFrame(segment, columns=['Normalized Data'])
+        
+        # Construct output file name based on segment time
+        start_time_ms = i * segment_duration_ms
+        end_time_ms = (i + 1) * segment_duration_ms
+        segment_file_name = f"{abf_file_name}_normalized_segment_{i}_channel_{channel_number}_{start_time_ms}_{end_time_ms}.csv"
+        segment_file_path = os.path.join(destination_path, segment_file_name)
+        
+        # Save the segment to a CSV file
+        segment_df.to_csv(segment_file_path, index=False)
+        print(f"Segment saved: {segment_file_path}")
+
+    print("Normalization and segmentation completed.")
+
 
 def determine_recording_mode(abf):
     """
