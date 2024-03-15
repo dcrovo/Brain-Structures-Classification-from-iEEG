@@ -314,42 +314,44 @@ def divide_signals_by_time(abf, time_window_ms=290):
 
     return segments
 
-def divide_signals_by_time_and_exclude_spikes(abf, time_window_ms=290, voltage_threshold=5, minimum_spike_distance=1000):
+def divide_signals_by_time_and_exclude_spikes(abf, time_window_ms=290, voltage_threshold=5, minimum_spike_distance=1000, channel_number=0):
     """
-    Divides the signals of an ABF object into segments based on a time window and excludes segments that contain spike impulses.
+    Divide las señales de un objeto ABF en segmentos basados en una ventana de tiempo y excluye segmentos que contienen impulsos de pico.
 
-    :param abf: Loaded ABF object.
-    :param time_window_ms: Time window in milliseconds to divide the signals.
-    :param voltage_threshold: Voltage threshold to detect impulses.
-    :param minimum_spike_distance: Minimum distance in indices between consecutive spikes.
-    :return: List of dictionaries, each representing signal segments without spikes, with their metadata.
+    :param abf: Objeto ABF cargado.
+    :param time_window_ms: Ventana de tiempo en milisegundos para dividir las señales.
+    :param voltage_threshold: Umbral de voltaje para detectar impulsos.
+    :param minimum_spike_distance: Distancia mínima en índices entre picos consecutivos.
+    :param channel_number: Número del canal a procesar.
+    :return: Lista de diccionarios, cada uno representando segmentos de señal sin picos, con sus metadatos.
     """
     fs = abf.dataRate
     samples_per_segment = int((time_window_ms / 1000) * fs)
     
     segments = []
-    for channel in range(abf.channelCount):
-        for sweep in range(abf.sweepCount):
-            abf.setSweep(sweepNumber=sweep, channel=channel)
-            spikes, _ = find_peaks(abf.sweepY, height=voltage_threshold, distance=minimum_spike_distance)
-            
-            for i in range(0, abf.sweepPointCount, samples_per_segment):
-                end_segment = min(i + samples_per_segment, abf.sweepPointCount)
-                if not np.any((spikes >= i) & (spikes < end_segment)):
-                    data_segment = abf.sweepY[i:end_segment]
-                    time_segment = abf.sweepX[i:end_segment]
-                    segments.append({
-                        'channel': channel,
-                        'sweep': sweep,
-                        'data': data_segment,
-                        'time': time_segment,
-                        'metadata': {
-                            'unit_measure': abf.adcUnits[channel],
-                            'sampling_rate': fs,
-                            'start_ms': i / fs * 1000,
-                            'end_ms': end_segment / fs * 1000
-                        }
-                    })
+    abf.setSweep(sweepNumber=0, channel=channel_number)
+    spikes, _ = find_peaks(abf.sweepY, height=voltage_threshold, distance=minimum_spike_distance)
+    
+    for sweep in range(abf.sweepCount):
+        abf.setSweep(sweepNumber=sweep, channel=channel_number)
+        
+        for i in range(0, abf.sweepPointCount, samples_per_segment):
+            end_segment = min(i + samples_per_segment, abf.sweepPointCount)
+            if not np.any((spikes >= i) & (spikes < end_segment)):
+                data_segment = abf.sweepY[i:end_segment]
+                time_segment = abf.sweepX[i:end_segment]
+                segments.append({
+                    'channel': channel_number,
+                    'sweep': sweep,
+                    'data': data_segment,
+                    'time': time_segment,
+                    'metadata': {
+                        'unit_measure': abf.adcUnits[channel_number],
+                        'sampling_rate': fs,
+                        'start_ms': i / fs * 1000,
+                        'end_ms': end_segment / fs * 1000
+                    }
+                })
 
     return segments
 
@@ -385,6 +387,7 @@ def save_segments_and_metadata(segments, metadata, directory_path):
         else:
             print(f"Segment file already exists: {full_path} (Not saved)")
 
+
 def process_abf_files(source_folder, destination_folder, time_window_ms=290):
     """
     Processes all .abf files in a folder, extracting metadata, detecting voltage spikes,
@@ -394,29 +397,20 @@ def process_abf_files(source_folder, destination_folder, time_window_ms=290):
     :param destination_folder: Folder where processed files will be saved.
     :param time_window_ms: Time window in milliseconds for dividing signals.
     """
-    os.makedirs(destination_folder, exist_ok=True)
+    os.makedirs(destination_folder, exist_ok=True)  # Asegurar que el directorio de destino existe
 
     for file in os.listdir(source_folder):
-        if file.endswith('.abf'):
+        if file.endswith('.abf'):  # Procesar solo archivos .abf
             file_path = os.path.join(source_folder, file)
-            print(file_path)
-            abf = pyabf.ABF(file_path)
-            metadata = extract_metadata(abf)
-            print(metadata)
-            channels_with_segments = False
+            abf = pyabf.ABF(file_path)  # Cargar archivo ABF
+            metadata = extract_metadata(abf)  # Extraer metadatos
 
-            for channel in range(abf.channelCount):
-                print(channel_has_spikes(abf, channel, voltage_threshold=5))
-                if channel_has_spikes(abf, channel, voltage_threshold=5):
-                    segments = divide_signals_by_time_and_exclude_spikes(abf, time_window_ms=time_window_ms, voltage_threshold=5, minimum_spike_distance=1000)
+            for channel in range(abf.channelCount):  # Iterar sobre todos los canales
+                if channel_has_spikes(abf, channel, voltage_threshold=5):  # Verificar si el canal tiene picos
+                    # Dividir señales por tiempo y excluir segmentos con picos
+                    segments = divide_signals_by_time_and_exclude_spikes(abf, time_window_ms=time_window_ms, voltage_threshold=5, minimum_spike_distance=1000, channel_number = channel)
                     if segments:
-                        channels_with_segments = True
+                        # Crear carpeta específica para este canal
                         channel_folder = os.path.join(destination_folder, os.path.splitext(file)[0], f'channel_{channel}')
-                        os.makedirs(channel_folder, exist_ok=True)
-                        save_segments_and_metadata(segments, metadata, channel_folder)
-            
-            if channels_with_segments:
-                file_name_without_extension = os.path.splitext(file)[0]
-                metadata_path = os.path.join(destination_folder, f'{file_name_without_extension}_metadata.json')
-                with open(metadata_path, 'w') as json_file:
-                    json.dump(metadata, json_file, indent=4)
+                        os.makedirs(channel_folder, exist_ok=True)  # Asegurar que la carpeta del canal existe
+                        save_segments_and_metadata(segments, metadata, channel_folder)  # Guardar segmentos y metadatos

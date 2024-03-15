@@ -36,5 +36,5 @@ def plot_abf_channels(abf_file_name):
         plt.show()
 
 # Example usage
-abf_file_name = "17613006.abf"  # Replace with your ABF file name
+abf_file_name = "15o14000.abf"  # Replace with your ABF file name
 plot_abf_channels(abf_file_name)
