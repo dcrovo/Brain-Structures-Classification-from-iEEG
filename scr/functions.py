@@ -127,8 +127,8 @@ def extract_metadata(abf):
 
     for i in range(abf.channelCount):
         abf.setSweep(0, channel=i)
-        metadata["channel_units"][i] = abf.sweepUnitsY
-        metadata["channel_labels"][i] = abf.sweepLabelY
+        metadata["channel_units"][i] = abf.adcUnits
+        metadata["channel_labels"][i] = abf.adcNames
 
     return metadata
 
