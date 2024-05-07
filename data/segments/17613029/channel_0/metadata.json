@@ -1,0 +1,24 @@
+{
+    "file_name": "17613029",
+    "sampling_rate": 10101,
+    "channel_count": 3,
+    "episode_count": 1,
+    "total_time": 9.9000099000099e-05,
+    "recording_date": "2017-06-13T17:53:44.150",
+    "comments": "vM1STR005 Cx750um S5.0m  STRSt 100us I=0.75mA WPSt 100us I=0",
+    "time_unit": "seconds",
+    "channel_units": {
+        "0": "mV",
+        "1": "mV",
+        "2": "mV"
+    },
+    "channel_labels": {
+        "0": "Membrane Potential (mV)",
+        "1": "Membrane Potential (mV)",
+        "2": "Membrane Potential (mV)"
+    },
+    "data_dimensions": [
+        3,
+        2287634
+    ]
+}
