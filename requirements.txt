@@ -1,0 +1,3 @@
+pyabf 
+matplotlib
+numpy

@@ -1,0 +1,4 @@
+[core]
+    remote = ieeg_remote
+['remote "ieeg_remote"']
+    url = gdrive://1QMmanpcUzPlDcoZ76GhomJ7sv6sQ2nSk
