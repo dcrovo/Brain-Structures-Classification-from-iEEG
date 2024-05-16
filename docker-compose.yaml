@@ -1,5 +1,4 @@
 version: '3.8'
-
 services: 
   db:
     restart: always
@@ -81,13 +80,16 @@ services:
       dockerfile: ./docker/jupyter/Dockerfile
     user: root 
     volumes: 
-      - /Users/igc/Documents/Dev/Phase2:/work
+      - ./:/work
     ports: 
       - 8085:8888
     container_name: jupyter_notebook
     networks:
       - frontend
       - backend
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
     command: "jupyter lab --ip=0.0.0.0 --allow-root --NotebookApp.token='' --NotebookApp.password=''"
     
 volumes:

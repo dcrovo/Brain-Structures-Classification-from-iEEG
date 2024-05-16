@@ -9,6 +9,7 @@ COPY data /work/data
 COPY notebooks /work/notebooks
 
 COPY ./docker/jupyter/requirements.txt /work/requirements.txt
+RUN pip3 install torch torchvision torchaudio
 
 # Install any needed packages specified in requirements.txt
 RUN pip install -r requirements.txt
