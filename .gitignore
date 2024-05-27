@@ -167,3 +167,6 @@ cython_debug/
 /minio_data
 
 /.Trash-0
+
+*.pt
+/models
