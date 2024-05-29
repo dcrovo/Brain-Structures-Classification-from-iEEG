@@ -13,7 +13,7 @@ from typing import Tuple, Union
 
 def get_loaders(data_dir: str, batch_size: int, num_workers: int, 
                 pin_memory: bool = True, with_val_loader: bool = False, 
-                test_size: float = 0.2, seq_length: int = 5000, 
+                test_size: float = 0.2, val_size: float = 0.1, seq_length: int = 5000, 
                 model_type: str = "mlp") -> Union[Tuple[DataLoader, DataLoader], Tuple[DataLoader, DataLoader, DataLoader]]:
     """
     Creates data loaders for training, testing, and optionally validation from IEEG dataset.
@@ -25,8 +25,9 @@ def get_loaders(data_dir: str, batch_size: int, num_workers: int,
         pin_memory (bool, optional): If True, the data loader will copy tensors into CUDA pinned memory before returning them. Default is True.
         with_val_loader (bool, optional): If True, a validation data loader is also returned. Default is False.
         test_size (float, optional): Proportion of the dataset to include in the test split. Default is 0.2.
+        val_size (float, optional): Proportion of the training set to include in the validation split. Default is 0.1.
         seq_length (int, optional): Length of each signal sequence. Default is 5000.
-        for_cnn (bool, optional): If True, the data is prepared for CNN input. Default is False.
+        model_type (str, optional): Specifies the type of model (e.g., "mlp", "cnn", "seq"). Default is "mlp".
 
     Returns:
         Union[Tuple[DataLoader, DataLoader], Tuple[DataLoader, DataLoader, DataLoader]]:
@@ -34,28 +35,41 @@ def get_loaders(data_dir: str, batch_size: int, num_workers: int,
     """
     
     dataset = IeegDataset(data_dir, seq_length=seq_length, model_type=model_type)
+    print(f"Total dataset size: {len(dataset)}")
 
     labels = np.array([dataset[i][1].item() for i in range(len(dataset))])
     sss = StratifiedShuffleSplit(n_splits=1, test_size=test_size, random_state=42)
 
     train_index, test_index = next(sss.split(np.zeros(len(labels)), labels))
+    print(f"Train indices length: {len(train_index)}, Test indices length: {len(test_index)}")
 
     train_dataset = Subset(dataset, train_index)
     test_dataset = Subset(dataset, test_index)
-    if model_type=="seq":
+    
+    if with_val_loader:
+        train_labels = np.array([train_dataset[i][1].item() for i in range(len(train_dataset))])
+        sss_val = StratifiedShuffleSplit(n_splits=1, test_size=val_size, random_state=42)
+        train_idx, val_idx = next(sss_val.split(np.zeros(len(train_labels)), train_labels))
+        print(f"Train indices after val split: {len(train_idx)}, Val indices: {len(val_idx)}")
+
+        # Adjust indices to match the train_dataset length
+        train_dataset = Subset(dataset, [train_index[i] for i in train_idx])
+        val_dataset = Subset(dataset, [train_index[i] for i in val_idx])
+
+        val_loader = DataLoader(val_dataset, batch_size=batch_size, num_workers=num_workers, pin_memory=pin_memory, shuffle=False)
+    
+    if model_type == "seq":
         train_loader = DataLoader(train_dataset, batch_size=batch_size, num_workers=num_workers, pin_memory=pin_memory, shuffle=False)
     else:
         train_loader = DataLoader(train_dataset, batch_size=batch_size, num_workers=num_workers, pin_memory=pin_memory, shuffle=True)
+    
     test_loader = DataLoader(test_dataset, batch_size=batch_size, num_workers=num_workers, pin_memory=pin_memory, shuffle=False)
 
     if with_val_loader:
-        val_size = int(0.1 * len(train_dataset))
-        train_size = len(train_dataset) - val_size
-        train_dataset, val_dataset = torch.utils.data.random_split(train_dataset, [train_size, val_size])
-
-        val_loader = DataLoader(val_dataset, batch_size=batch_size, num_workers=num_workers, pin_memory=pin_memory, shuffle=False)
+        print(f"Train dataset length: {len(train_dataset)}, Val dataset length: {len(val_dataset)}, Test dataset length: {len(test_dataset)}")
         return train_loader, val_loader, test_loader, dataset
 
+    print(f"Train dataset length: {len(train_dataset)}, Test dataset length: {len(test_dataset)}")
     return train_loader, test_loader, dataset
 
 def import_checkpoint(checkpoint_path: str, model: torch.nn.Module) -> None:
