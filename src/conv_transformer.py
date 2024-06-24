@@ -58,6 +58,7 @@ class ConvTransformerModel(nn.Module):
                  transformer_dim: int = 128, num_heads: int = 4, 
                  transformer_depth: int = 2,
                  fc_neurons: list = [512, 128],
+                 fc_transformer: int = 128,
                  dropout: float = 0.3, activation: nn.Module = nn.ReLU()):
         super(ConvTransformerModel, self).__init__()
 
@@ -68,10 +69,10 @@ class ConvTransformerModel(nn.Module):
         self.transformer_blocks = nn.ModuleList(
             [MultiheadSelfAttentionBlock(dim=transformer_dim, num_heads=num_heads, dropout=dropout) for _ in range(transformer_depth)]
         )
-        self.fc_transformer = nn.Linear(transformer_dim, 128)
+        self.fc_transformer = nn.Linear(transformer_dim, fc_transformer)
 
         # Fully connected layers for output
-        self.transformer_output_size = 128  # Size after the fc_transformer layer
+        self.transformer_output_size = fc_transformer  # Size after the fc_transformer layer
 
         self.fc_layers = nn.ModuleList()
         self.fc_layers.append(nn.Linear(self.transformer_output_size, fc_neurons[0]))

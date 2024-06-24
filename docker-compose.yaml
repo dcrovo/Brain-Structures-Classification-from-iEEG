@@ -33,11 +33,9 @@ services:
       - MINIO_PORT=${MINIO_PORT}
       - MINIO_STORAGE_USE_HTTPS=${MINIO_STORAGE_USE_HTTPS}
       - MINIO_CONSOLE_ADDRESS=${MINIO_CONSOLE_ADDRESS}
-    
     volumes:
       - ./minio_data:/data
     command: server /data
-
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 30s

@@ -22,7 +22,7 @@ class IeegDataset(Dataset):
         seq_length (int, optional): Length of each signal sequence. Default is 5000.
         for_cnn (bool, optional): If True, the data is prepared for CNN input. Default is False.
     """
-    def __init__(self, data_dir: str, seq_length: int = 5000, model_type: str = "ann"):
+    def __init__(self, data_dir: str, seq_length: int = 5000, model_type: str = "mlp"):
         self.data_dir = data_dir
         self.seq_length = seq_length
         self.model_type= model_type

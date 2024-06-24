@@ -56,14 +56,14 @@ def get_loaders(data_dir: str, batch_size: int, num_workers: int,
         train_dataset = Subset(dataset, [train_index[i] for i in train_idx])
         val_dataset = Subset(dataset, [train_index[i] for i in val_idx])
 
-        val_loader = DataLoader(val_dataset, batch_size=batch_size, num_workers=num_workers, pin_memory=pin_memory, shuffle=False)
+        val_loader = DataLoader(val_dataset, batch_size=batch_size, num_workers=num_workers, pin_memory=pin_memory, shuffle=False, drop_last=True)
     
     if model_type == "seq":
-        train_loader = DataLoader(train_dataset, batch_size=batch_size, num_workers=num_workers, pin_memory=pin_memory, shuffle=False)
+        train_loader = DataLoader(train_dataset, batch_size=batch_size, num_workers=num_workers, pin_memory=pin_memory, shuffle=False, drop_last=True)
     else:
-        train_loader = DataLoader(train_dataset, batch_size=batch_size, num_workers=num_workers, pin_memory=pin_memory, shuffle=True)
+        train_loader = DataLoader(train_dataset, batch_size=batch_size, num_workers=num_workers, pin_memory=pin_memory, shuffle=True, drop_last=True)
     
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, num_workers=num_workers, pin_memory=pin_memory, shuffle=False)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, num_workers=num_workers, pin_memory=pin_memory, shuffle=False, drop_last=True)
 
     if with_val_loader:
         print(f"Train dataset length: {len(train_dataset)}, Val dataset length: {len(val_dataset)}, Test dataset length: {len(test_dataset)}")
