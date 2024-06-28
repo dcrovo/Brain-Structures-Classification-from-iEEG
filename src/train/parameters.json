@@ -1,0 +1,13 @@
+{
+    "activation": "GELU",
+    "batch_size": 114,
+    "dropout": 0.2,
+    "fc_neurons1": 381,
+    "fc_neurons2": 76,
+    "fc_transformer": 196,
+    "lr": 0.0006213852742159501,
+    "num_heads": 4,
+    "transformer_depth": 2,
+    "transformer_dim": 512,
+    "weight_decay": 6.62394063832403e-06
+}

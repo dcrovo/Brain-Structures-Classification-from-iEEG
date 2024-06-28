@@ -171,3 +171,4 @@ cython_debug/
 *.pt
 /models
 /plots
+/notebooks/initial_testing_notebooks

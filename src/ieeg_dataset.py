@@ -20,19 +20,27 @@ class IeegDataset(Dataset):
     Args:
         data_dir (str): Directory containing the data files.
         seq_length (int, optional): Length of each signal sequence. Default is 5000.
-        for_cnn (bool, optional): If True, the data is prepared for CNN input. Default is False.
+        model_type (str, optional): Specifies the type of model (e.g., "mlp", "cnn", "seq"). Default is "mlp".
+        label_encoder (LabelEncoder, optional): Label encoder to use. Default is None.
     """
-    def __init__(self, data_dir: str, seq_length: int = 5000, model_type: str = "mlp"):
+    def __init__(self, data_dir: str, seq_length: int = 5000, model_type: str = "mlp", label_encoder=None):
         self.data_dir = data_dir
         self.seq_length = seq_length
-        self.model_type= model_type
+        self.model_type = model_type
         self.data = []
         self.labels = []
 
         # Extract class names from filenames
         self.classes = [f.split('_')[0] for f in os.listdir(self.data_dir)]
-        self.label_encoder = LabelEncoder()
-        self.label_encoder.fit(self.classes)
+
+        if label_encoder is None:
+            class_mapping = {"CA": 0 , "CA1": 1, "Thalamus": 2 ,"vM1": 3}
+            self.class_mapping = class_mapping
+            self.label_encoder = LabelEncoder()
+            self.label_encoder.fit([class_mapping[label] for label in self.classes])
+            print(f"Applying this mapping: {class_mapping}")
+        else:
+            self.label_encoder = label_encoder
 
         # Load data from CSV files
         self._load_data()
@@ -50,8 +58,10 @@ class IeegDataset(Dataset):
             for column in df.columns: 
                 for idx in range(0, math.floor(df.shape[0] / self.seq_length)):
                     signal_window = df[column].values[idx * self.seq_length : (idx + 1) * self.seq_length]
-                    class_label = self.label_encoder.transform([file.split('_')[0]])
-
+                    class_label = file.split('_')[0]
+                    if hasattr(self, 'class_mapping'):
+                        class_label = self.class_mapping[class_label]
+                    class_label = self.label_encoder.transform([class_label])
                     self.data.append(signal_window)
                     self.labels.append(class_label)
 
@@ -81,8 +91,6 @@ class IeegDataset(Dataset):
         if self.model_type == "mlp":
             return self.data[index], self.labels[index] 
 
-        
-
     def get_class_mapping(self) -> Dict[int, str]:
         """
         Returns the mapping of class indices to class names.
@@ -90,6 +98,7 @@ class IeegDataset(Dataset):
         Returns:
             Dict[int, str]: Mapping of class indices to class names.
         """
-        return {i: class_name for i, class_name in enumerate(self.label_encoder.classes_)}
-
-
+        if hasattr(self, 'class_mapping'):
+            return {v: k for k, v in self.class_mapping.items()}
+        else:
+            return {i: class_name for i, class_name in enumerate(self.label_encoder.classes_)}

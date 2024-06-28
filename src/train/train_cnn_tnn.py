@@ -1,10 +1,18 @@
 import os
 import sys
-sys.path.append('../')
 
-from conv_transformer import ConvTransformerModel
+# Determine the current script's directory
+current_dir = os.path.dirname(os.path.abspath(__file__))
 
-from utils import get_loaders, import_checkpoint, save_checkpoint
+# Define the project root directory based on the current script's location
+project_root = os.path.abspath(os.path.join(current_dir, '../../'))
+
+# Add the project root directory to the Python path
+sys.path.append(project_root)
+from root import DIR_DATA, DIR_MODELS, DIR_PLOTS, DIR_SRC
+from src.cnn_tnn import ConvTransformerModel
+
+from src.utils import get_loaders, import_checkpoint, save_checkpoint,get_loaders_noss
 import torch
 import multiprocessing
 import mlflow
@@ -21,10 +29,11 @@ import psutil
 from torch.cuda.amp import GradScaler, autocast
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
-import math
+import json
 
 
-## MLFLOW Setupu
+
+## MLFLOW Setup
 os.environ['AWS_ACCESS_KEY_ID'] = 'dIgexhE2iDrGls2qargL'
 os.environ['AWS_SECRET_ACCESS_KEY'] = 'IzEzgQpztotDnrIInJdUfUIYngpjJoT18d0FDZf7'
 os.environ['MLFLOW_S3_ENDPOINT_URL'] = 'http://localhost:9000'
@@ -34,19 +43,20 @@ mlflow.set_tracking_uri("http://localhost:5000")
 print('tracking uri:', mlflow.get_tracking_uri())
 
 # Configuration
-DATA_DIR = '../../data/data_normalized_exp2'
+DATA_DIR = os.path.join(DIR_DATA, 'data_normalized_exp2')
 SEQ_LENGTH = 500
-BATCH_SIZE = 64
-NUM_EPOCHS = 50
-LEARNING_RATE = 0.0001
-EXPERIMENT_NAME = "OPTIMIZATION_CNN_TNN"
+NUM_EPOCHS = 100
+EARLY_PATIENCE=15
+EXPERIMENT_NAME = "FINAL_CNN_TNN_TRAINING_2"
 PIN_MEMORY = True
 LOAD_MODEL = False
 NUM_WORKERS = multiprocessing.cpu_count()
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 INPUT_SIZE = SEQ_LENGTH
 NUM_CLASSES = 4
-CHECKPOINTS_PATH = '../../models/checkpoints'
+CHECKPOINTS_PATH = os.path.join(DIR_MODELS, 'checkpoints')
+HYPERPARAMETERS_PATH = os.path.join(DIR_SRC, 'train/parameters.json')
+RESULTS_DIR = os.path.join(DIR_MODELS, 'results')
 
 
 def get_model_size(model):
@@ -59,9 +69,14 @@ def get_model_size(model):
     size_all_mb = (param_size + buffer_size) / 1024 ** 2
     return size_all_mb
 
+def load_hyperparameters(path):
+    with open(path, 'r') as file:
+        hyperparameters = json.load(file)
+    return hyperparameters
+
 
 def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoader, optimizer: optim.Optimizer, 
-                criterion: nn.Module, num_epochs: int, device: torch.device, save_checkpoint_interval: int = 10, 
+                scheduler: optim.lr_scheduler, criterion: nn.Module, num_epochs: int, device: torch.device, save_checkpoint_interval: int = 10, 
                 early_stopping_patience: int = 15, checkpoint_dir: str = '../models/checkpoints', 
                 results_dir: str = '../models/results', accumulation_steps: int = 2,
                 cnn=False, model_name='CNN'):
@@ -73,6 +88,7 @@ def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoad
         train_loader (DataLoader): DataLoader for the training data.
         val_loader (DataLoader): DataLoader for the validation data.
         optimizer (optim.Optimizer): Optimizer for updating model parameters.
+        scheduler (optim.lr_scheduler): Scheduler for updating the learning rate.
         criterion (nn.Module): Loss function.
         num_epochs (int): Number of epochs to train.
         device (torch.device): Device to use for training (CPU or GPU).
@@ -218,6 +234,9 @@ def train_model(model: nn.Module, train_loader: DataLoader, val_loader: DataLoad
             mlflow.log_param(f"{model_name}_epochs_actual", epoch + 1)
             break
 
+        # Step the scheduler
+        scheduler.step(avg_val_loss)
+
         # Clear CUDA cache after each epoch
         torch.cuda.empty_cache()
 
@@ -309,65 +328,90 @@ def evaluate_model(model: nn.Module, test_loader: DataLoader, dataset: Dataset,
 
 
 def main():
-    train_loader, val_loader, test_loader, dataset = get_loaders(data_dir=DATA_DIR, 
+    print("_________________________________\nLoading Hyperparameters")
+    hyp = load_hyperparameters(HYPERPARAMETERS_PATH)
+    print("_________________________________\nGetting loaders")
+
+    train_loader, val_loader, test_loader, dataset = get_loaders_noss(data_dir=DATA_DIR, 
                                                                  with_val_loader=True, 
-                                                                 batch_size=BATCH_SIZE, 
+                                                                 batch_size=hyp["batch_size"], 
                                                                  num_workers=NUM_WORKERS,
                                                                  pin_memory=PIN_MEMORY, 
-                                                                 test_size=0.15, 
+                                                                 test_size=0.2, 
                                                                  seq_length=SEQ_LENGTH, 
                                                                  model_type="cnn")
     
         # Model parameters
-    input_size = SEQ_LENGTH  # Use the sequence length provided by your dataset
-    num_classes = 4  # Number of classes for classification
-    conv_filters = [64, 128]  # Reduced number of filters to save memory
-    transformer_dim = 128  # Smaller transformer dimension
-    num_heads = 4  # Fewer attention heads
-    transformer_depth = 2  # Fewer transformer layers
-    fc_neurons = [512, 128]  # Reduced fully connected layer sizes
-    dropout = 0.3  # Dropout rate
+
+    if hyp["activation"] == "GELU":
+        activation = nn.GELU()
+    if hyp["activation"] == "ReLU":
+        activation = nn.ReLU()
+    print("_________________________________\nCreating model")
 
     model = ConvTransformerModel(
-        input_size=input_size,
-        num_classes=num_classes,
-        transformer_dim=transformer_dim,
-        num_heads=num_heads,
-        transformer_depth=transformer_depth,
-        fc_neurons=fc_neurons,
-        dropout=dropout,
-        activation=nn.ReLU()
-    ).to(DEVICE)
+        input_size=SEQ_LENGTH,
+        num_classes=NUM_CLASSES,
+        transformer_dim=hyp["transformer_dim"],
+        num_heads=hyp["num_heads"],
+        transformer_depth=hyp["transformer_depth"],
+        fc_neurons=[hyp["fc_neurons1"], hyp["fc_neurons2"]],
+        fc_transformer=hyp["fc_transformer"],
+        dropout=hyp["dropout"],
+        activation=activation
+        ).to(DEVICE)
+    
+
+    print(model)
+        
     print(f'Model size: {get_model_size(model):.3f} MB')
-    optimizer = optim.Adam(model.parameters(), lr = LEARNING_RATE)
-    criterion =  nn.CrossEntropyLoss()  
+
+    optimizer = optim.Adam(model.parameters(), lr=hyp["lr"], weight_decay=hyp["weight_decay"])
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=5)
+    criterion = nn.CrossEntropyLoss().to(DEVICE)
+
     mlflow.set_experiment(EXPERIMENT_NAME)
+    
     # Train and Evaluate the Model with MLflow
-    run_name = "run_CNN_TNN_optimize"
-    model_name = "CNN_TNN_optimized"
-    results_dir = "../../models/results"
+    run_name = "run_CNN_TNN_optimized_2_no_ss"
+    model_name = "CNN_TNN_optimized_2_no_ss"
+    results_dir = RESULTS_DIR
+    
     with mlflow.start_run(run_name=run_name) as run:
         # Log parameters
         mlflow.log_param("epochs", NUM_EPOCHS)
-        mlflow.log_param("batch_size", BATCH_SIZE)
-        mlflow.log_param("learning_rate", LEARNING_RATE)
+        mlflow.log_param("batch_size", hyp["batch_size"])
+        mlflow.log_param("learning_rate", hyp["lr"])
         mlflow.log_param("model", model_name)
         mlflow.log_param("input_size", SEQ_LENGTH)
-        mlflow.log_param("num_classes", NUM_CLASSES)
+        mlflow.log_param("transformer_dim", hyp["transformer_dim"])
+        mlflow.log_param("num_heads", hyp["num_heads"])
+        mlflow.log_param("transformer_depth", hyp["transformer_depth"])
+        mlflow.log_param("fc_neurons1", hyp["fc_neurons1"])
+        mlflow.log_param("fc_neurons2", hyp["fc_neurons2"])
+        mlflow.log_param("fc_transformer", hyp["fc_transformer"])
+        mlflow.log_param("dropout", hyp["dropout"])
+        mlflow.log_param("activation", hyp["activation"])
+        mlflow.log_param("weight_decay", hyp["weight_decay"])
+        
         mlflow.log_dict(dataset.get_class_mapping(), "class_mapping.json")
 
         # Train and Evaluate the Model
-        train_model(model, train_loader,val_loader, optimizer, criterion, NUM_EPOCHS, DEVICE, 
+        print(f"_________________________________\nStarting training for {NUM_EPOCHS} epochs")
+
+        train_model(model, train_loader, val_loader, optimizer, scheduler, criterion, NUM_EPOCHS, DEVICE, 
                     save_checkpoint_interval=10, checkpoint_dir=CHECKPOINTS_PATH, 
-                    model_name=model_name, early_stopping_patience=10, cnn=False)
-        _,_ = evaluate_model(model, test_loader, dataset, DEVICE, 
-                            results_dir=results_dir,
-                            img_path='../../plots', 
-                            run_name=run_name,
-                            cnn=False)
+                    model_name=model_name, early_stopping_patience=EARLY_PATIENCE, cnn=False)
+        print(f"_________________________________\nEvaluating model")
+
+        _, _ = evaluate_model(model, test_loader, dataset, DEVICE, 
+                              results_dir=RESULTS_DIR,
+                              img_path=DIR_PLOTS, 
+                              run_name=run_name,
+                              cnn=False)
 
         # Log the model
-        mlflow.pytorch.log_model(model, model_name)
+        mlflow.pytorch.log_model(model, model_name, registered_model_name=model_name)
 
 if __name__ == '__main__':
     main()

@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
 class ConvEmbeddingStem(nn.Module):
     def __init__(self, in_channels=1, out_channels=16):
         super().__init__()
@@ -33,6 +34,8 @@ class ConvEmbeddingStem(nn.Module):
         x = self.bn2(self.act2(self.conv2(x)))
         x = self.bn3(self.act3(self.conv3(x)))
         return x
+
+
 
 class MultiheadSelfAttentionBlock(nn.Module):
     def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, dropout=0.):
@@ -100,3 +103,5 @@ class ConvTransformerModel(nn.Module):
         
         x = self.output_layer(x)
         return x
+    
+
